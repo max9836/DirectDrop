@@ -1,0 +1,108 @@
+name: Build DirectDrop on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-unix:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+
+      - name: Get Architecture
+        id: arch
+        run: |
+          python -c "import platform; print(f'ARCH={platform.machine().lower()}')" >> $GITHUB_ENV
+
+      - name: Build directdrop.py with PyInstaller
+        run: |
+          pyinstaller --onefile directdrop.py
+
+      - name: Rename output for upload
+        run: |
+          NAME=directdrop
+          VERSION=${{ github.event.release.tag_name }}
+          case "${{ matrix.os }}" in
+            ubuntu-latest) OS=linux ;;
+            macos-latest) OS=macos ;;
+          esac
+          EXT=""
+          ARCH=$(echo $ARCH)
+          ARTIFACT="dist/${NAME}${EXT}"
+          DEST="${NAME}-${VERSION}-${OS}-${ARCH}${EXT}"
+          mv "$ARTIFACT" "dist/$DEST"
+          echo "ARTIFACT_OUT=$DEST" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_OUT }}
+          path: dist/${{ env.ARTIFACT_OUT }}
+
+  build-windows:
+    name: Build on Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+
+      - name: Get Architecture
+        id: arch
+        shell: pwsh
+        run: |
+          python -c "import platform; print(f'ARCH={platform.machine().lower()}')" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build directdrop.py with PyInstaller
+        run: |
+          pyinstaller --onefile directdrop.py
+
+      - name: Rename output for upload
+        shell: pwsh
+        run: |
+          $NAME = "directdrop"
+          $VERSION = "${{ github.event.release.tag_name }}"
+          $OS = "windows"
+          $ARCH = "${env:ARCH}"
+          $EXT = ".exe"
+          $ARTIFACT = "dist/${NAME}${EXT}"
+          $DEST = "${NAME}-${VERSION}-${OS}-${ARCH}${EXT}"
+          Rename-Item -Path $ARTIFACT -NewName $DEST
+          echo "ARTIFACT_OUT=$DEST" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_OUT }}
+          path: dist\${{ env.ARTIFACT_OUT }}
